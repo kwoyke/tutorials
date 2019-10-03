@@ -5,17 +5,17 @@ import org.springframework.batch.item.ItemProcessor;
 
 public class SkippingItemProcessor implements ItemProcessor<Transaction, Transaction> {
 
-    private static final int MAX_USER_ID = 2000;
-
     @Override
-    public Transaction process(Transaction transaction) throws Exception {
-        System.out.println("Processing : " + transaction);
+    public Transaction process(Transaction transaction) {
 
-        int userId = transaction.getUserId();
-        if(userId > MAX_USER_ID){
-            String message = String.format("User ID (%d) exceeds maximum value allowed", userId);
-            System.out.println(message);
-            throw new InvalidIdException(message);
+        System.out.println("SkippingItemProcessor: " + transaction);
+
+        if (transaction.getUsername() == null || transaction.getUsername().isEmpty()) {
+            throw new MissingUsernameException();
+        }
+
+        if (transaction.getAmount() < 0) {
+            throw new NegativeAmountException();
         }
 
         return transaction;

@@ -1,10 +1,7 @@
 package org.baeldung.batch;
 
 import org.baeldung.batch.model.Transaction;
-import org.baeldung.batch.service.CustomItemProcessor;
-import org.baeldung.batch.service.InvalidIdException;
-import org.baeldung.batch.service.RecordFieldSetMapper;
-import org.baeldung.batch.service.SkippingItemProcessor;
+import org.baeldung.batch.service.*;
 import org.springframework.batch.core.Job;
 import org.springframework.batch.core.Step;
 import org.springframework.batch.core.configuration.annotation.JobBuilderFactory;
@@ -30,24 +27,26 @@ import java.text.ParseException;
 
 public class SpringBatchConfig {
     @Autowired
-    private JobBuilderFactory jobs;
+    private JobBuilderFactory jobBuilderFactory;
 
     @Autowired
-    private StepBuilderFactory steps;
+    private StepBuilderFactory stepBuilderFactory;
 
     @Value("input/record.csv")
     private Resource inputCsv;
 
+    @Value("input/recordWithInvalidData.csv")
+    private Resource invalidInputCsv;
+
     @Value("file:xml/output.xml")
     private Resource outputXml;
 
-    @Bean
-    public ItemReader<Transaction> itemReader() throws UnexpectedInputException, ParseException {
+    public ItemReader<Transaction> itemReader(Resource inputData) throws UnexpectedInputException, ParseException {
         FlatFileItemReader<Transaction> reader = new FlatFileItemReader<Transaction>();
         DelimitedLineTokenizer tokenizer = new DelimitedLineTokenizer();
         String[] tokens = {"username", "userid", "transactiondate", "amount"};
         tokenizer.setNames(tokens);
-        reader.setResource(inputCsv);
+        reader.setResource(inputData);
         DefaultLineMapper<Transaction> lineMapper = new DefaultLineMapper<Transaction>();
         lineMapper.setLineTokenizer(tokenizer);
         lineMapper.setFieldSetMapper(new RecordFieldSetMapper());
@@ -62,7 +61,7 @@ public class SpringBatchConfig {
     }
 
     @Bean
-    public ItemProcessor<Transaction, Transaction> skippingItemProcessor(){
+    public ItemProcessor<Transaction, Transaction> skippingItemProcessor() {
         return new SkippingItemProcessor();
     }
 
@@ -83,36 +82,35 @@ public class SpringBatchConfig {
     }
 
     @Bean
-    protected Step step1(ItemReader<Transaction> reader,
-                         @Qualifier("itemProcessor") ItemProcessor<Transaction, Transaction> processor,
-                         ItemWriter<Transaction> writer) {
-        return steps.get("step1").<Transaction, Transaction>chunk(10).reader(reader).processor(processor).writer(writer).build();
+    protected Step step1(@Qualifier("itemProcessor") ItemProcessor<Transaction, Transaction> processor,
+                         ItemWriter<Transaction> writer) throws ParseException {
+        return stepBuilderFactory.get("step1").<Transaction, Transaction>chunk(10).reader(itemReader(inputCsv)).processor(processor).writer(writer).build();
     }
 
     @Bean(name = "firstBatchJob")
     public Job job(@Qualifier("step1") Step step1) {
-        return jobs.get("firstBatchJob").start(step1).build();
+        return jobBuilderFactory.get("firstBatchJob").start(step1).build();
     }
 
     @Bean
-    public Step skippingStep(ItemReader<Transaction> reader,
-                             @Qualifier("skippingItemProcessor") ItemProcessor<Transaction, Transaction> processor,
-                             ItemWriter<Transaction> writer) {
-        return steps
+    public Step skippingStep(@Qualifier("skippingItemProcessor") ItemProcessor<Transaction, Transaction> processor,
+                             ItemWriter<Transaction> writer) throws ParseException {
+        return stepBuilderFactory
                 .get("skippingStep")
                 .<Transaction, Transaction>chunk(10)
-                .reader(reader)
+                .reader(itemReader(invalidInputCsv))
                 .processor(processor)
                 .writer(writer)
                 .faultTolerant()
-                .skipLimit(5)
-                .skip(InvalidIdException.class)
+                .skipLimit(2)
+                .skip(MissingUsernameException.class)
+                .skip(NegativeAmountException.class)
                 .build();
     }
 
     @Bean(name = "skippingBatchJob")
     public Job skippingJob(@Qualifier("skippingStep") Step skippingStep) {
-        return jobs
+        return jobBuilderFactory
                 .get("skippingBatchJob")
                 .start(skippingStep)
                 .build();
