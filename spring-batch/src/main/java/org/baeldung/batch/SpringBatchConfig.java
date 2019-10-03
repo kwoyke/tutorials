@@ -2,7 +2,9 @@ package org.baeldung.batch;
 
 import org.baeldung.batch.model.Transaction;
 import org.baeldung.batch.service.CustomItemProcessor;
+import org.baeldung.batch.service.InvalidIdException;
 import org.baeldung.batch.service.RecordFieldSetMapper;
+import org.baeldung.batch.service.SkippingItemProcessor;
 import org.springframework.batch.core.Job;
 import org.springframework.batch.core.Step;
 import org.springframework.batch.core.configuration.annotation.JobBuilderFactory;
@@ -60,6 +62,11 @@ public class SpringBatchConfig {
     }
 
     @Bean
+    public ItemProcessor<Transaction, Transaction> skippingItemProcessor(){
+        return new SkippingItemProcessor();
+    }
+
+    @Bean
     public ItemWriter<Transaction> itemWriter(Marshaller marshaller) throws MalformedURLException {
         StaxEventItemWriter<Transaction> itemWriter = new StaxEventItemWriter<Transaction>();
         itemWriter.setMarshaller(marshaller);
@@ -76,13 +83,39 @@ public class SpringBatchConfig {
     }
 
     @Bean
-    protected Step step1(ItemReader<Transaction> reader, ItemProcessor<Transaction, Transaction> processor, ItemWriter<Transaction> writer) {
+    protected Step step1(ItemReader<Transaction> reader,
+                         @Qualifier("itemProcessor") ItemProcessor<Transaction, Transaction> processor,
+                         ItemWriter<Transaction> writer) {
         return steps.get("step1").<Transaction, Transaction>chunk(10).reader(reader).processor(processor).writer(writer).build();
     }
 
     @Bean(name = "firstBatchJob")
     public Job job(@Qualifier("step1") Step step1) {
         return jobs.get("firstBatchJob").start(step1).build();
+    }
+
+    @Bean
+    public Step skippingStep(ItemReader<Transaction> reader,
+                             @Qualifier("skippingItemProcessor") ItemProcessor<Transaction, Transaction> processor,
+                             ItemWriter<Transaction> writer) {
+        return steps
+                .get("skippingStep")
+                .<Transaction, Transaction>chunk(10)
+                .reader(reader)
+                .processor(processor)
+                .writer(writer)
+                .faultTolerant()
+                .skipLimit(5)
+                .skip(InvalidIdException.class)
+                .build();
+    }
+
+    @Bean(name = "skippingBatchJob")
+    public Job skippingJob(@Qualifier("skippingStep") Step skippingStep) {
+        return jobs
+                .get("skippingBatchJob")
+                .start(skippingStep)
+                .build();
     }
 
 }
