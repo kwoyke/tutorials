@@ -1,7 +1,12 @@
 package org.baeldung.batch;
 
 import org.baeldung.batch.model.Transaction;
-import org.baeldung.batch.service.*;
+import org.baeldung.batch.service.CustomItemProcessor;
+import org.baeldung.batch.service.CustomSkipPolicy;
+import org.baeldung.batch.service.MissingUsernameException;
+import org.baeldung.batch.service.NegativeAmountException;
+import org.baeldung.batch.service.RecordFieldSetMapper;
+import org.baeldung.batch.service.SkippingItemProcessor;
 import org.springframework.batch.core.Job;
 import org.springframework.batch.core.Step;
 import org.springframework.batch.core.configuration.annotation.JobBuilderFactory;
@@ -22,7 +27,6 @@ import org.springframework.core.io.Resource;
 import org.springframework.oxm.Marshaller;
 import org.springframework.oxm.jaxb.Jaxb2Marshaller;
 
-import java.net.MalformedURLException;
 import java.text.ParseException;
 
 public class SpringBatchConfig {
@@ -42,12 +46,12 @@ public class SpringBatchConfig {
     private Resource outputXml;
 
     public ItemReader<Transaction> itemReader(Resource inputData) throws UnexpectedInputException, ParseException {
-        FlatFileItemReader<Transaction> reader = new FlatFileItemReader<Transaction>();
+        FlatFileItemReader<Transaction> reader = new FlatFileItemReader<>();
         DelimitedLineTokenizer tokenizer = new DelimitedLineTokenizer();
         String[] tokens = {"username", "userid", "transactiondate", "amount"};
         tokenizer.setNames(tokens);
         reader.setResource(inputData);
-        DefaultLineMapper<Transaction> lineMapper = new DefaultLineMapper<Transaction>();
+        DefaultLineMapper<Transaction> lineMapper = new DefaultLineMapper<>();
         lineMapper.setLineTokenizer(tokenizer);
         lineMapper.setFieldSetMapper(new RecordFieldSetMapper());
         reader.setLinesToSkip(1);
@@ -66,8 +70,8 @@ public class SpringBatchConfig {
     }
 
     @Bean
-    public ItemWriter<Transaction> itemWriter(Marshaller marshaller) throws MalformedURLException {
-        StaxEventItemWriter<Transaction> itemWriter = new StaxEventItemWriter<Transaction>();
+    public ItemWriter<Transaction> itemWriter(Marshaller marshaller) {
+        StaxEventItemWriter<Transaction> itemWriter = new StaxEventItemWriter<>();
         itemWriter.setMarshaller(marshaller);
         itemWriter.setRootTagName("transactionRecord");
         itemWriter.setResource(outputXml);
@@ -113,6 +117,28 @@ public class SpringBatchConfig {
         return jobBuilderFactory
                 .get("skippingBatchJob")
                 .start(skippingStep)
+                .build();
+    }
+
+    @Bean
+    public Step skipPolicyStep(@Qualifier("skippingItemProcessor") ItemProcessor<Transaction, Transaction> processor,
+                               ItemWriter<Transaction> writer) throws ParseException {
+        return stepBuilderFactory
+                .get("skipPolicyStep")
+                .<Transaction, Transaction>chunk(10)
+                .reader(itemReader(invalidInputCsv))
+                .processor(processor)
+                .writer(writer)
+                .faultTolerant()
+                .skipPolicy(new CustomSkipPolicy())
+                .build();
+    }
+
+    @Bean(name = "skipPolicyBatchJob")
+    public Job skipPolicyBatchJob(@Qualifier("skipPolicyStep") Step skipPolicyStep) {
+        return jobBuilderFactory
+                .get("skipPolicyBatchJob")
+                .start(skipPolicyStep)
                 .build();
     }
 

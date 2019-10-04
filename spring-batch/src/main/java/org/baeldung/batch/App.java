@@ -20,6 +20,7 @@ public class App {
 
         runJob(context, "firstBatchJob");
         runJob(context, "skippingBatchJob");
+        runJob(context, "skipPolicyBatchJob");
     }
 
     private static void runJob(AnnotationConfigApplicationContext context, String batchJobName) {

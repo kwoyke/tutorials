@@ -14,8 +14,9 @@ public class SkippingItemProcessor implements ItemProcessor<Transaction, Transac
             throw new MissingUsernameException();
         }
 
-        if (transaction.getAmount() < 0) {
-            throw new NegativeAmountException();
+        double txAmount = transaction.getAmount();
+        if (txAmount < 0) {
+            throw new NegativeAmountException(txAmount);
         }
 
         return transaction;
