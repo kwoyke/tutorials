@@ -5,8 +5,8 @@ import io.restassured.RestAssured;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
+
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
-import static com.github.tomakehurst.wiremock.client.WireMock.configureFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.containing;
 import static com.github.tomakehurst.wiremock.client.WireMock.get;
 import static com.github.tomakehurst.wiremock.client.WireMock.post;
@@ -17,19 +17,20 @@ import static io.restassured.RestAssured.with;
 import static org.hamcrest.Matchers.hasItems;
 
 public class RestAssured2IntegrationTest {
-    private static final int PORT = 8084;
-    private static WireMockServer wireMockServer = new WireMockServer(PORT);
 
     private static final String EVENTS_PATH = "/odds";
     private static final String APPLICATION_JSON = "application/json";
     private static final String ODDS = getJson();
 
+    private static WireMockServer wireMockServer;
+
     @BeforeClass
     public static void before() throws Exception {
         System.out.println("Setting up!");
+        final int port = Util.getAvailablePort();
+        wireMockServer = new WireMockServer(port);
         wireMockServer.start();
-        configureFor("localhost", PORT);
-        RestAssured.port = PORT;
+        RestAssured.port = port;
         stubFor(get(urlEqualTo(EVENTS_PATH)).willReturn(
           aResponse().withStatus(200)
             .withHeader("Content-Type", APPLICATION_JSON)
